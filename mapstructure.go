@@ -531,6 +531,13 @@ func (d *Decoder) decodeMap(name string, data interface{}, val reflect.Value) er
 				valMap.SetMapIndex(reflect.ValueOf(keyName), vMap)
 
 			default:
+				if !v.CanSet() {
+					// Resolve pointer to its value if possible
+					vt, err_vt := stripPtrs(v)
+					if err_vt == nil {
+						v = vt
+					}
+				}
 				if v.CanSet() {
 					valMap.SetMapIndex(reflect.ValueOf(keyName), v)
 				}
@@ -711,6 +718,15 @@ func (d *Decoder) decodeStruct(name string, data interface{}, val reflect.Value)
 	}
 
 	dataValKind := dataVal.Kind()
+	if dataValKind == reflect.Struct {
+		t_map := make(map[string]interface{})
+		if err := d.decodeMap(name, data, reflect.ValueOf(t_map)); err != nil {
+			return err
+		}
+		data = t_map
+		dataVal = reflect.Indirect(reflect.ValueOf(data))
+		dataValKind = dataVal.Kind()
+	}
 	if dataValKind != reflect.Map {
 		return fmt.Errorf("'%s' expected a map, got '%s'", name, dataValKind)
 	}
@@ -884,4 +900,23 @@ func getKind(val reflect.Value) reflect.Kind {
 	default:
 		return kind
 	}
+}
+
+func stripPtrs(rv reflect.Value) (reflect.Value, error) {
+	// Some pointer chains are disguised as interface
+	if rv.Kind() == reflect.Interface {
+		// Try to reassess type
+		rv = reflect.ValueOf(rv.Interface())
+	}
+	for rv.Kind() == reflect.Ptr {
+		if rv.IsNil() {
+			return rv, errors.New("Pointer is nil")
+		}
+		rv = rv.Elem()
+		if rv.Kind() == reflect.Interface {
+			// Try to reassess type
+			rv = reflect.ValueOf(rv.Interface())
+		}
+	}
+	return rv, nil
 }
