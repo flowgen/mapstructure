@@ -784,7 +784,7 @@ func (d *Decoder) decodeStruct(name string, data interface{}, val reflect.Value)
 			}
 
 			if fieldKind == reflect.Struct {
-				if squash || d.config.AlwaysSquash {
+				if squash || (d.config.AlwaysSquash && fieldType.Anonymous) {
 					structs = append(structs, val.FieldByName(fieldType.Name))
 					continue
 				}
