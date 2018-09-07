@@ -888,6 +888,17 @@ func (d *Decoder) decodeStruct(name string, data interface{}, val reflect.Value)
 	}
 
 	dataValKind := dataVal.Kind()
+	// TODO: Refactor this as this is inefficient. There should be no need to
+	//       decode struct into a map just to decode it into a new struct.
+	if dataValKind == reflect.Struct {
+		t_map := make(map[string]interface{})
+		if err := d.decodeMap(name, data, reflect.ValueOf(t_map)); err != nil {
+			return err
+		}
+		data = t_map
+		dataVal = reflect.Indirect(reflect.ValueOf(data))
+		dataValKind = dataVal.Kind()
+	}
 	if dataValKind != reflect.Map {
 		return fmt.Errorf("'%s' expected a map, got '%s'", name, dataValKind)
 	}
