@@ -817,6 +817,107 @@ func TestDecode_TypeConversion(t *testing.T) {
 	}
 }
 
+func TestDecodeFromPointerMap_Basic(t *testing.T) {
+	t.Parallel()
+
+	vstring := "foo"
+	vint := int(42)
+	vuint := uint(42)
+	vbool := true
+	vfloat := 42.42
+	vjsonInt := json.Number("1234")
+	vjsonNumber := json.Number("1234.5")
+	input := map[string]interface{}{
+		"vstring":     &vstring,
+		"vint":        &vint,
+		"Vuint":       &vuint,
+		"vbool":       &vbool,
+		"Vfloat":      &vfloat,
+		"vsilent":     &vbool,
+		"vdata":       &vint,
+		"vjsonInt":    &vjsonInt,
+		"vjsonFloat":  &vjsonNumber,
+		"vjsonNumber": &vjsonNumber,
+	}
+
+	var result Basic
+	err := Decode(input, &result)
+	if err != nil {
+		t.Fatalf("got an err: %s", err.Error())
+	}
+
+	if result.Vstring != "foo" {
+		t.Errorf("vstring value should be 'foo': %#v", result.Vstring)
+	}
+
+	if result.Vint != 42 {
+		t.Errorf("vint value should be 42: %#v", result.Vint)
+	}
+
+	if result.Vuint != 42 {
+		t.Errorf("vuint value should be 42: %#v", result.Vuint)
+	}
+
+	if result.Vbool != true {
+		t.Errorf("vbool value should be true: %#v", result.Vbool)
+	}
+
+	if result.Vfloat != 42.42 {
+		t.Errorf("vfloat value should be 42.42: %#v", result.Vfloat)
+	}
+
+	if result.Vextra != "" {
+		t.Errorf("vextra value should be empty: %#v", result.Vextra)
+	}
+
+	if result.vsilent != false {
+		t.Error("vsilent should not be set, it is unexported")
+	}
+
+	if result.Vdata != 42 {
+		t.Error("vdata should be valid")
+	}
+
+	if result.VjsonInt != 1234 {
+		t.Errorf("vjsonint value should be 1234: %#v", result.VjsonInt)
+	}
+
+	if result.VjsonFloat != 1234.5 {
+		t.Errorf("vjsonfloat value should be 1234.5: %#v", result.VjsonFloat)
+	}
+
+	if !reflect.DeepEqual(result.VjsonNumber, json.Number("1234.5")) {
+		t.Errorf("vjsonnumber value should be '1234.5': %T, %#v", result.VjsonNumber, result.VjsonNumber)
+	}
+}
+
+func TestDecodeFromPointerMap_Nested(t *testing.T) {
+	t.Parallel()
+
+	vfoo := "foo"
+	vbar := "bar"
+	input := map[string]interface{}{
+		"vfoo": &vfoo,
+		"vbar": &map[string]interface{}{
+			"vstring": &vbar,
+		},
+	}
+
+	var result Nested
+	err := Decode(input, &result)
+	if err != nil {
+		t.Fatalf("got an err: %s", err.Error())
+	}
+
+	if result.Vfoo != "foo" {
+		t.Errorf("Vfoo value should be 'foo': %#v", result.Vfoo)
+	}
+
+	if result.Vbar.Vstring != "bar" {
+		t.Errorf("Vbar.Vstring value should be 'bar': %#v", result.Vbar.Vstring)
+	}
+}
+
 func TestDecoder_ErrorUnused(t *testing.T) {
 	t.Parallel()
 

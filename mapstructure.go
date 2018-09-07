@@ -237,7 +237,7 @@ func (d *Decoder) decode(name string, input interface{}, outVal reflect.Value) e
 		return nil
 	}
 
-	inputVal := reflect.ValueOf(input)
+	inputVal := getValue(input)
 	if !inputVal.IsValid() {
 		// If the input value is invalid, then we just set the value
 		// to be the zero value.
@@ -306,7 +306,7 @@ func (d *Decoder) decodeBasic(name string, data interface{}, val reflect.Value) 
 	if val.IsValid() && val.Elem().IsValid() {
 		return d.decode(name, data, val.Elem())
 	}
-	dataVal := reflect.ValueOf(data)
+	dataVal := getValue(data)
 	if !dataVal.IsValid() {
 		dataVal = reflect.Zero(val.Type())
 	}
@@ -323,7 +323,7 @@ func (d *Decoder) decodeBasic(name string, data interface{}, val reflect.Value) 
 }
 
 func (d *Decoder) decodeString(name string, data interface{}, val reflect.Value) error {
-	dataVal := reflect.ValueOf(data)
+	dataVal := getValue(data)
 	dataKind := getKind(dataVal)
 
 	converted := true
@@ -375,7 +375,7 @@ func (d *Decoder) decodeString(name string, data interface{}, val reflect.Value)
 }
 
 func (d *Decoder) decodeInt(name string, data interface{}, val reflect.Value) error {
-	dataVal := reflect.ValueOf(data)
+	dataVal := getValue(data)
 	dataKind := getKind(dataVal)
 	dataType := dataVal.Type()
 
@@ -400,7 +400,7 @@ func (d *Decoder) decodeInt(name string, data interface{}, val reflect.Value) er
 			return fmt.Errorf("cannot parse '%s' as int: %s", name, err)
 		}
 	case dataType.PkgPath() == "encoding/json" && dataType.Name() == "Number":
-		jn := data.(json.Number)
+		jn := dataVal.Interface().(json.Number)
 		i, err := jn.Int64()
 		if err != nil {
 			return fmt.Errorf(
@@ -417,7 +417,7 @@ func (d *Decoder) decodeInt(name string, data interface{}, val reflect.Value) er
 }
 
 func (d *Decoder) decodeUint(name string, data interface{}, val reflect.Value) error {
-	dataVal := reflect.ValueOf(data)
+	dataVal := getValue(data)
 	dataKind := getKind(dataVal)
 
 	switch {
@@ -460,7 +460,7 @@ func (d *Decoder) decodeUint(name string, data interface{}, val reflect.Value) e
 }
 
 func (d *Decoder) decodeBool(name string, data interface{}, val reflect.Value) error {
-	dataVal := reflect.ValueOf(data)
+	dataVal := getValue(data)
 	dataKind := getKind(dataVal)
 
 	switch {
@@ -491,7 +491,7 @@ func (d *Decoder) decodeBool(name string, data interface{}, val reflect.Value) e
 }
 
 func (d *Decoder) decodeFloat(name string, data interface{}, val reflect.Value) error {
-	dataVal := reflect.ValueOf(data)
+	dataVal := getValue(data)
 	dataKind := getKind(dataVal)
 	dataType := dataVal.Type()
 
@@ -516,7 +516,7 @@ func (d *Decoder) decodeFloat(name string, data interface{}, val reflect.Value) 
 			return fmt.Errorf("cannot parse '%s' as float: %s", name, err)
 		}
 	case dataType.PkgPath() == "encoding/json" && dataType.Name() == "Number":
-		jn := data.(json.Number)
+		jn := dataVal.Interface().(json.Number)
 		i, err := jn.Float64()
 		if err != nil {
 			return fmt.Errorf(
@@ -548,7 +548,7 @@ func (d *Decoder) decodeMap(name string, data interface{}, val reflect.Value) er
 	}
 
 	// Check input type and based on the input type jump to the proper func
-	dataVal := reflect.Indirect(reflect.ValueOf(data))
+	dataVal := reflect.Indirect(getValue(data))
 	switch dataVal.Kind() {
 	case reflect.Map:
 		return d.decodeMapFromMap(name, dataVal, val, valMap)
@@ -733,7 +733,7 @@ func (d *Decoder) decodePtr(name string, data interface{}, val reflect.Value) er
 func (d *Decoder) decodeFunc(name string, data interface{}, val reflect.Value) error {
 	// Create an element of the concrete (non pointer) type and decode
 	// into that. Then set the value of the pointer to this type.
-	dataVal := reflect.Indirect(reflect.ValueOf(data))
+	dataVal := reflect.Indirect(getValue(data))
 	if val.Type() != dataVal.Type() {
 		return fmt.Errorf(
 			"'%s' expected type '%s', got unconvertible type '%s'",
@@ -744,7 +744,7 @@ func (d *Decoder) decodeFunc(name string, data interface{}, val reflect.Value) e
 }
 
 func (d *Decoder) decodeSlice(name string, data interface{}, val reflect.Value) error {
-	dataVal := reflect.Indirect(reflect.ValueOf(data))
+	dataVal := reflect.Indirect(getValue(data))
 	dataValKind := dataVal.Kind()
 	valType := val.Type()
 	valElemType := valType.Elem()
@@ -811,7 +811,7 @@ func (d *Decoder) decodeSlice(name string, data interface{}, val reflect.Value) 
 }
 
 func (d *Decoder) decodeArray(name string, data interface{}, val reflect.Value) error {
-	dataVal := reflect.Indirect(reflect.ValueOf(data))
+	dataVal := reflect.Indirect(getValue(data))
 	dataValKind := dataVal.Kind()
 	valType := val.Type()
 	valElemType := valType.Elem()
@@ -878,7 +878,7 @@ func (d *Decoder) decodeArray(name string, data interface{}, val reflect.Value) 
 }
 
 func (d *Decoder) decodeStruct(name string, data interface{}, val reflect.Value) error {
-	dataVal := reflect.Indirect(reflect.ValueOf(data))
+	dataVal := reflect.Indirect(getValue(data))
 
 	// If the type of the value to write to and the data match directly,
 	// then we just set it directly instead of recursing into the structure.
@@ -1061,4 +1061,33 @@ func getKind(val reflect.Value) reflect.Kind {
 	default:
 		return kind
 	}
+}
+
+func getValue(data interface{}) reflect.Value {
+	dataVal := reflect.ValueOf(data)
+
+	strippedDataVal, err := stripPtrs(dataVal)
+	if err == nil {
+		return strippedDataVal
+	}
+	return dataVal
+}
+
+func stripPtrs(rv reflect.Value) (reflect.Value, error) {
+	// Some pointer chains are disguised as interface
+	if rv.Kind() == reflect.Interface {
+		// Try to reassess type
+		rv = reflect.ValueOf(rv.Interface())
+	}
+	for rv.Kind() == reflect.Ptr {
+		if rv.IsNil() {
+			return rv, errors.New("Pointer is nil")
+		}
+		rv = rv.Elem()
+		if rv.Kind() == reflect.Interface {
+			// Try to reassess type
+			rv = reflect.ValueOf(rv.Interface())
+		}
+	}
+	return rv, nil
 }
