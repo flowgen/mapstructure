@@ -908,6 +908,30 @@ func TestDecode_StructMatch(t *testing.T) {
 	}
 }
 
+func TestDecode_StructMismatch(t *testing.T) {
+	t.Parallel()
+
+	input := map[string]interface{}{
+		"Vfoo": "foo",
+		"Vbar": BasicSquash{
+			Test: Basic{
+				Vstring: "foo",
+			},
+		},
+	}
+
+	var result Nested
+	err := Decode(input, &result)
+	if err != nil {
+		t.Errorf("got an err: %s", err.Error())
+		t.FailNow()
+	}
+
+	if result.Vbar.Vstring != "foo" {
+		t.Errorf("bad: %#v", result)
+	}
+}
+
 func TestDecode_TypeConversion(t *testing.T) {
 	input := map[string]interface{}{
 		"IntToFloat":         42,
